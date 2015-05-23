@@ -25,8 +25,7 @@ namespace supermarx
 		enum state_e {
 			S_INIT,
 			S_PRODUCT,
-			S_PRODUCT_IMAGE,
-			S_PRODUCT_BADGE
+			S_PRODUCT_IMAGE
 		};
 
 		product_callback_t product_callback;
@@ -40,11 +39,10 @@ namespace supermarx
 		{
 			std::string identifier, name;
 			boost::optional<std::string> image_uri;
-			boost::optional<unsigned int> price;
-			boost::optional<unsigned int> was_price;
-			boost::optional<std::string> valid_from_to;
-			boost::optional<std::string> unit;
-			boost::optional<std::string> badge;
+			boost::optional<size_t> price;
+			boost::optional<size_t> old_price;
+			boost::optional<std::string> caliber;
+			boost::optional<std::string> discount;
 
 			confidence conf = confidence::NEUTRAL;
 			std::vector<std::string> problems;
@@ -79,90 +77,47 @@ namespace supermarx
 			current_p.problems.emplace_back(sstr.str());
 		}
 
-		void interpret_unit(std::string unit, uint64_t& volume, measure& volume_measure)
+		void interpret_caliber(std::string unit, uint64_t& volume, measure& volume_measure)
 		{
-			static const std::set<std::string> valid_stuks({
-				"st", "stuk", "stuks",
-				"scharreleieren", "tabl", "filterhulzen", "test", "schuursponsen",
-				"verbanden", "tandenstokers", "strips", "bruistabletten",
-				"patches", "tabletten", "condooms", "capsules", "servetten", "paar",
-				"gezichtstissues", "rol", "tissues", "sigaretten", "witte bollen",
-				"haardblok", "vrije uitloop eieren", "braadschotels", "caps", "geurkaarsen",
-				"luiers", "kauwtabletten", "pakjes", "tampons", "blaarpleisters",
-				"rollen", "toiletrollen", "aanstekers", "geurbuiltjes", "slim filters",
-				"theefilters", "inlegkruisjes", "sigaren", "beschuiten", "batterijen",
-				"doekjes", "sigaretten"
-			});
-
-			static const std::set<std::string> invalid_stuks({
-				"wasbeurten", "plakjes", "bos", "bosjes", "porties",
-				"zakjes", "sachets", "kaarten", "lapjes", "zegel", "pakjes"
-			});
-
-			static const boost::regex match_multi("([0-9]+)(?: )?[xX](?: )?(.+)");
-
-			static const boost::regex match_stuks("(?:ca. )?([0-9]+) (.+)");
-			static const boost::regex match_pers("(?:ca. )?([0-9]+(?:-[0-9]+)?) pers\\.");
-
-			static const boost::regex match_measure("(?:ca. )?([0-9]+(?:\\.[0-9]+)?)(?: )?(mg|g|gr|gram|kg|kilo|ml|cl|l|lt|liter|litre)(?:\\.)?");
+			static const boost::regex match_split("([^\\d]+) (.+)");
+			static const boost::regex match_measure("([0-9]+(?:\\.[0-9]+)?)[\\s]+(.+)");
 			boost::smatch what;
 
-			std::replace(unit.begin(), unit.end(), ',', '.');
-
-			uint64_t multiplier = 1;
-			if(boost::regex_match(unit, what, match_multi))
-			{
-				multiplier = boost::lexical_cast<uint64_t>(what[1]);
+			if(boost::regex_match(unit, what, match_split))
 				unit = what[2];
-			}
 
-			if(
-				unit == "per stuk" ||
-				unit == "per krop" ||
-				unit == "per bos" ||
-				unit == "per bosje" ||
-				unit == "per doos" ||
-				unit == "per set" ||
-				unit == "éénkops" ||
-				boost::regex_match(unit, what, match_pers)
-			)
-			{
-				// Do nothing
-			}
-			else if(boost::regex_match(unit, what, match_stuks))
-			{
-				if(valid_stuks.find(what[2]) != valid_stuks.end())
-					volume = boost::lexical_cast<float>(what[1]);
-				else if(invalid_stuks.find(what[2]) != invalid_stuks.end())
-				{
-					// Do nothing
-				}
-			}
-			else if(boost::regex_match(unit, what, match_measure))
+			std::transform(unit.begin(), unit.end(), unit.begin(), ::tolower);
+
+			if(boost::regex_match(unit, what, match_measure))
 			{
 				std::string measure_type = what[2];
 
-				if(measure_type == "mg")
+				if(measure_type == "stuk" || measure_type == "stuks")
+				{
+					volume = boost::lexical_cast<float>(what[1]);
+					volume_measure = measure::UNITS;
+				}
+				else if(measure_type == "mg")
 				{
 					volume = boost::lexical_cast<float>(what[1]);
 					volume_measure = measure::MILLIGRAMS;
 				}
-				else if(measure_type == "g" || measure_type == "gr" || measure_type == "gram")
+				else if(measure_type == "g" || measure_type == "gr" || measure_type == "gram" || measure_type == "milligram")
 				{
 					volume = boost::lexical_cast<float>(what[1])*1000.0;
 					volume_measure = measure::MILLIGRAMS;
 				}
-				else if(measure_type == "kg" || measure_type == "kilo")
+				else if(measure_type == "kg" || measure_type == "kilo" || measure_type == "kilogram")
 				{
 					volume = boost::lexical_cast<float>(what[1])*1000000.0;
 					volume_measure = measure::MILLIGRAMS;
 				}
-				else if(measure_type == "ml")
+				else if(measure_type == "ml" || measure_type == "milliliter")
 				{
 					volume = boost::lexical_cast<float>(what[1]);
 					volume_measure = measure::MILLILITERS;
 				}
-				else if(measure_type == "cl")
+				else if(measure_type == "cl" || measure_type == "centilliter")
 				{
 					volume = boost::lexical_cast<float>(what[1])*100.0;
 					volume_measure = measure::MILLILITERS;
@@ -171,6 +126,11 @@ namespace supermarx
 				{
 					volume = boost::lexical_cast<float>(what[1])*1000.0;
 					volume_measure = measure::MILLILITERS;
+				}
+				else if(measure_type == "meter")
+				{
+					volume = boost::lexical_cast<float>(what[1])*1000.0;
+					volume_measure = measure::MILLIMETERS;
 				}
 				else
 				{
@@ -184,73 +144,47 @@ namespace supermarx
 				report_problem_understanding("unit", unit);
 				current_p.conf = confidence::LOW;
 			}
-
-			volume *= multiplier;
 		}
 
-		void interpret_badge(std::string const& badge, uint64_t& price, uint64_t& discount_amount)
+		void interpret_discount(std::string discount_str, uint64_t& price, uint64_t& discount_amount)
 		{
-			static const boost::regex match_ps_voor("p/s voor [0-9]+,[0-9]+");
-			static const boost::regex match_percent_discount("([0-9]+)% (?:probeer)?korting");
-			static const boost::regex match_combination_discount("([0-9]+) voor ([0-9]+),([0-9]+)");
+			static const boost::regex match_percent_discount("([0-9]+)% korting");
+			static const boost::regex match_combination_discount("([0-9]+) voor € ([0-9]+\\.[0-9]+)");
+			static const boost::regex match_per("€ ([0-9]+\\.[0-9]+) per (.+)");
 			boost::smatch what;
 
-			if(boost::regex_match(badge, what, match_ps_voor) ||
-				badge == "Omdozen Wijn 5% korting")
+			if(discount_str == "Prijs verlaagd")
 			{
-				// Do nothing, already encoded
+				// Do nothing
 			}
-			else if(boost::regex_match(badge, what, match_combination_discount))
-			{
-				discount_amount = boost::lexical_cast<uint64_t>(what[1]);
-				price = boost::lexical_cast<float>(what[2] + '.' + what[3])*100.0;
-			}
-			else if(boost::regex_match(badge, what, match_percent_discount))
+			else if(boost::regex_match(discount_str, what, match_percent_discount))
 			{
 				price *= 1.0 - boost::lexical_cast<float>(what[1])/100.0;
 			}
-			else if(badge == "2e halve prijs")
+			else if(boost::regex_match(discount_str, what, match_combination_discount))
+			{
+				discount_amount = boost::lexical_cast<uint64_t>(what[1]);
+				price = boost::lexical_cast<float>(what[2])*100.0;
+			}
+			else if(discount_str == "2e halve prijs")
 			{
 				discount_amount = 2;
 				price = price * 0.75;
 			}
-			else if(badge == "1 + 1 gratis" || badge == "2 halen, 1 betalen")
+			else if(discount_str == "1 + 1 gratis" || discount_str == "2 halen, 1 betalen")
 			{
 				discount_amount = 2;
 				price = price * 0.5;
 			}
-			else if(badge == "2 + 1 gratis")
+			else if(discount_str == "2 + 1 gratis")
 			{
 				discount_amount = 3;
 				price = (price * 2) / 3;
 			}
-			//else if(badge == "samen voor 2 Euro") // Cannot encode this
+			//else if(boost::regex_match(discount_str, what, match_per)) // TODO
 			else
 			{
-				report_problem_understanding("badge", badge);
-				current_p.conf = confidence::LOW;
-			}
-		}
-
-		void interpret_valid_on(std::string const& valid_from_to, datetime& valid_on)
-		{
-			static const boost::regex match_valid_from_to("Geldig van ([0-9]+)-([0-9]+) t/m [0-9]+-[0-9]+");
-			boost::smatch what;
-
-			if(boost::regex_match(valid_from_to, what, match_valid_from_to))
-			{
-				size_t day = boost::lexical_cast<size_t>(what[1]);
-				size_t month = boost::lexical_cast<size_t>(what[2]);
-
-				auto now(datetime_now());
-				date d(now.date().year(), month, day);
-
-				if(d > now.date())
-					valid_on = datetime(d);
-			}
-			else
-			{
-				report_problem_understanding("valid_from_to", valid_from_to);
+				report_problem_understanding("discount_str", discount_str);
 				current_p.conf = confidence::LOW;
 			}
 		}
@@ -260,8 +194,8 @@ namespace supermarx
 			uint64_t volume = 1;
 			measure volume_measure = measure::UNITS;
 
-			if(current_p.unit)
-				interpret_unit(*current_p.unit, volume, volume_measure);
+			if(current_p.caliber)
+				interpret_caliber(*current_p.caliber, volume, volume_measure);
 
 			if(!current_p.price)
 			{
@@ -272,18 +206,13 @@ namespace supermarx
 			uint64_t orig_price = *current_p.price;
 			uint64_t price = orig_price;
 
-			if(current_p.was_price)
-				orig_price = *current_p.was_price;
+			if(current_p.old_price)
+				orig_price = *current_p.old_price;
 
 			uint64_t discount_amount = 1;
 
-			if(current_p.badge)
-				interpret_badge(*current_p.badge, price, discount_amount);
-
-			datetime valid_on = datetime_now();
-
-			if(current_p.valid_from_to)
-				interpret_valid_on(*current_p.valid_from_to, valid_on);
+			if(current_p.discount)
+				interpret_discount(*current_p.discount, price, discount_amount);
 
 			product_callback(
 				product{
@@ -294,7 +223,7 @@ namespace supermarx
 					orig_price,
 					price,
 					discount_amount,
-					valid_on
+					datetime_now()
 				},
 				current_p.image_uri,
 				datetime_now(),
@@ -330,11 +259,10 @@ namespace supermarx
 			switch(state)
 			{
 			case S_INIT:
-				if(util::contains_attr("jum-item-product", att_class))
+				if(util::contains_attr("item-product", att_class))
 				{
 					//Reset product
 					current_p = product_proto();
-					current_p.identifier = atts.getValue("data-jum-product-sku");
 
 					state = S_PRODUCT;
 					wc.add([&]() {
@@ -345,77 +273,78 @@ namespace supermarx
 				}
 			break;
 			case S_PRODUCT:
-				if(util::contains_attr("jum-item-titlewrap", att_class))
+				if(qName == "input" && atts.getValue("name") == "product" && util::contains_attr("pid", att_class))
+				{
+					current_p.identifier = atts.getValue("value");
+				}
+				else if(util::contains_attr("product-name", att_class))\
 				{
 					rec = html_recorder(
 						[&](std::string ch) {
 							current_p.name = util::sanitize(ch);
 						});
 				}
-				else if(util::contains_attr("jum-item-figure", att_class))
+				else if(util::contains_attr("thumb-img", att_class))
 				{
 					state = S_PRODUCT_IMAGE;
 					wc.add([&]() {
 						state = S_PRODUCT;
 					});
 				}
-				else if(
-					util::contains_attr("jum-price-format", att_class) &&
-					!util::contains_attr("jum-comparative-price", att_class) &&
-					!util::contains_attr("jum-was-price", att_class)
-				)
+				else if(qName == "span" && util::contains_attr("price", att_class))
 				{
-					// TODO check comparative price / assert
+					rec = html_recorder(
+						[&](std::string ch) {
+							static const boost::regex match_price("[^0-9]+([0-9]+),([0-9]+)");
+							boost::smatch what;
 
-					rec = html_recorder(
-						[&](std::string ch) {
-							current_p.price = boost::lexical_cast<unsigned int>(util::sanitize(ch));
+							std::string ch_san(util::sanitize(ch));
+							if(!boost::regex_match(ch_san, what, match_price))
+								throw std::runtime_error("Malformed price '" + ch_san + "'");
+
+							current_p.price = boost::lexical_cast<size_t>(what[1]) * 100 + boost::lexical_cast<size_t>(what[2]);
 						});
 				}
-				else if(
-					util::contains_attr("jum-price-format", att_class) &&
-					util::contains_attr("jum-was-price", att_class)
-				)
+				else if(qName == "span" && util::contains_attr("old-price", att_class))
 				{
 					rec = html_recorder(
 						[&](std::string ch) {
-							ch = util::sanitize(ch);
-							boost::erase_all(ch, ",");
-							current_p.was_price = boost::lexical_cast<unsigned int>(ch);
+							static const boost::regex match_old_price("[^0-9]+([0-9]+),([0-9]+)"); // old-price contains extra white-space
+							boost::smatch what;
+
+							std::string ch_san(util::sanitize(ch));
+							if(!boost::regex_match(ch_san, what, match_old_price))
+								throw std::runtime_error("Malformed old-price '" + ch_san + "'");
+
+							current_p.old_price = boost::lexical_cast<size_t>(what[1]) * 100 + boost::lexical_cast<size_t>(what[2]);
 						});
 				}
-				else if(util::contains_attr("jum-pack-size", att_class))
+				else if(qName == "span" && util::contains_attr("discount", att_class))
 				{
 					rec = html_recorder(
 						[&](std::string ch) {
-							current_p.unit = util::sanitize(ch);
+							current_p.discount = util::sanitize(ch);
 						});
 				}
-				else if(util::contains_attr("jum-promotion-date", att_class))
+				else if(qName == "span" && util::contains_attr("caliber", att_class))
 				{
 					rec = html_recorder(
 						[&](std::string ch) {
-							current_p.valid_from_to = util::sanitize(ch);
+							current_p.caliber = util::sanitize(ch);
 						});
-				}
-				else if(util::contains_attr("jum-item-badges", att_class))
-				{
-					state = S_PRODUCT_BADGE;
-					wc.add([&]() {
-						state = S_PRODUCT;
-					});
 				}
 			break;
 			case S_PRODUCT_IMAGE:
 				if(qName == "img")
 				{
-					current_p.image_uri = atts.getValue("data-jum-hr-src");
-				}
-			break;
-			case S_PRODUCT_BADGE:
-				if(qName == "img")
-				{
-					current_p.badge = atts.getValue("alt");
+					static const boost::regex match_img("(.*)/small_image/135x/(.*)");
+					boost::smatch what;
+
+					std::string src(atts.getValue("src"));
+					if(!boost::regex_match(src, what, match_img))
+						throw std::runtime_error("Malformed image uri '" + src + "'");
+
+					current_p.image_uri = what[1] + "/image/" + what[2];
 				}
 			break;
 			}
