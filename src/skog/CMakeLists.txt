@@ -1,17 +1,20 @@
 project(skog)
 
 find_package(jsoncpp REQUIRED)
+find_package(yaml-cpp REQUIRED)
 find_package(Boost COMPONENTS system program_options regex locale date_time filesystem REQUIRED)
 
 include_directories(SYSTEM
                     ${Boost_INCLUDE_DIRS}
 					${jsoncpp_INCLUDE_DIRS}
+					${yaml-cpp_INCLUDE_DIRS}
                     ${SuperMarx_INCLUDE_DIRS})
                     
 add_library(skogcore scraper.cpp)
 target_link_libraries(skogcore
 					  supermarx-scraper
 					  ${jsoncpp_LIBRARIES}
+					  ${yaml-cpp_LIBRARIES}
                       ${Boost_LIBRARIES}) 
 
 add_executable(skog main.cpp)
