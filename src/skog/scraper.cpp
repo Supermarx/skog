@@ -58,7 +58,7 @@ namespace supermarx
 				assert(offset < newOffset); // Hard progress
 				offset = newOffset;
 
-				product_parser pp([&](const product& p, boost::optional<std::string> const& _image_uri, datetime retrieved_on, confidence conf, problems_t probs)
+				product_parser pp([&](const message::product_base& p, boost::optional<std::string> const& _image_uri, datetime retrieved_on, confidence conf, problems_t probs)
 				{
 					callback(puri, _image_uri, p, retrieved_on, conf, probs);
 				});
