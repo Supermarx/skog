@@ -47,7 +47,7 @@ namespace supermarx
 				puri_ss << "&cat=" << _cid;
 
 				std::string puri = puri_ss.str();
-				Json::Value root(parse_json(dl.fetch(puri)));
+				Json::Value root(parse_json(dl.fetch(puri).body));
 				if(root["status"].asString() != "success")
 					throw std::runtime_error("Server does not report success");
 
@@ -70,15 +70,15 @@ namespace supermarx
 
 		category_parser cp([&](category_parser::category_uri_t const& _curi)
 		{
-			cidp.parse(dl.fetch(_curi));
+			cidp.parse(dl.fetch(_curi).body);
 		});
 
-		cp.parse(dl.fetch(base_uri));
+		cp.parse(dl.fetch(base_uri).body);
 	}
 
 	raw scraper::download_image(const std::string& uri)
 	{
-		std::string buf(dl.fetch(uri));
+		std::string buf(dl.fetch(uri).body);
 		return raw(buf.data(), buf.length());
 	}
 }
