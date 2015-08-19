@@ -221,7 +221,8 @@ namespace supermarx
 					orig_price,
 					price,
 					discount_amount,
-					datetime_now()
+					datetime_now(),
+					{} // TODO (tags)
 				},
 				current_p.image_uri,
 				datetime_now(),
