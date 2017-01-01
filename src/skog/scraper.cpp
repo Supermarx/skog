@@ -37,7 +37,7 @@ namespace supermarx
 
 	void scraper::scrape()
 	{
-		static const std::string base_uri("http://derks.spar.nl"); // Derks has been chosen at random
+		static const std::string base_uri("http://vanespelo.spar.nl"); // Van Espelo has been chosen at random
 
 		product_count = 0;
 		page_count = 0;
